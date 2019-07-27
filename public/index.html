@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="">
+  <title>Ping Pong Game  - With Basic Socket.io Integration</title>
+
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+  <style>
+    .container, .row {
+      height: 100%;
+      min-height: 100%;
+    }
+
+    html, body {
+      height: 100%;
+    }  
+  </style>
+</head> 
+<body class="text-center">
+    
+  
+  <div class="container" id="game-intro">
+      <div class="row justify-content-center align-items-center">
+        <div class="col">
+          <h1 class="cover-heading">PingPong Game</h1>
+          <p>Play with computer or with your friend by scanning the QR codes below.</p>
+          <div id="qrcode-container"></div>
+            <!-- <a href="#" class="btn btn-lg btn-secondary">Learn more</a> -->
+          
+        </div>
+      </div>
+  </div>
+
+  <div class="container" id="game-stage" style="display: none;">
+      <div class="row justify-content-center align-items-center">
+        <div class="col">  
+            <canvas id="canvas" width="650" height="400"></canvas>
+        </div>
+      </div>
+  </div>
+
+  <footer class="mastfoot mt-auto  border bg-light  fixed-bottom" style="bottom:0px;">
+      <div class="container-fluid">
+          <div class="row mx-lg-n5">
+            <div class="col py-3 px-lg-5">By <a href="https://github.com/thesoledev-public" target="_blank">JBG</a></div>
+          </div>      
+      </div>
+  </footer>
+  <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    var urlPath = "http://89.47.161.93:3005/";    
+    var socket = io();
+
+    socket = io.connect(urlPath, { query: "devicetype=desktop" });    
+    socket.on('token', function(data){
+      console.log(data);
+      currentToken = data;
+      $('#qrcode-container').html('<img src="https://chart.googleapis.com/chart?chs=300x300&cht=qr&chl=http://localhost:3000/control?token='+data+'&choe=UTF-8" title="Link to Google.com" />'+'<br /><div class="token-txt"><strong>TOKEN : ' + data +'</strong></div>');
+    });
+
+
+
+    socket.on('deviceDesktopPaired', function(data){
+    console.log(data);
+    if(data.status == 'paired')
+    {
+        arr_pairing= {
+          'desktop_socketId' : data.desktop_socketId,
+          'device_socketId' : data.device_socketId,
+          'token' : data.token,
+          'status' : data.status
+        }; 
+
+        socket.emit("pairedSuccess", {'status':data.status,'token':data.token,'device_socketId':data.device_socketId,'desktop_socketId':data.desktop_socketId}); 
+        
+       console.log('PAIREDDDDDDDDDDDDDDDD');
+    }
+    else
+    {
+      alert('Token not exists.');
+    }
+
+});
+
+socket.on('startTrigger', function(data){
+
+  if(data.trigger == 'start')
+  {
+      $('#game-intro').hide();
+      $('#game-stage').show();
+console.log('STARTTTTTTTTTT');
+
+  }
+  
+}); 
+
+
+</script>
+
+<script>
+  var W = canvas.width;
+  var H = canvas.height;
+  var ballX = W/2;
+  var ballY = H/2;
+  var ballSpeedX = 5;
+  var ballSpeedY = 0;
+  var paddle1Y = 150;
+  var paddle2Y = 150;
+  var winningScreenShowed = false;
+  var stopped = false;
+  var requestId = 0;
+  var computerLevel = 9; //range 0 - 10
+
+  var playerScore = 0;
+  var computerScore = 0;
+
+  const WINNING_SCORE = 3;
+  const PADDLE_HEIGHT = 100;
+  const PADDLE_THICKNESS = 10;
+
+  window.onload = function(){
+    var canvas = document.getElementById('canvas');
+    var ctx = canvas.getContext('2d');  
+    
+    function loop(){
+      if (!stopped) {
+        moveEverything();
+        drawEverything();
+        requestId = window.requestAnimationFrame(loop);
+      }
+    }
+
+    function start() {
+      requestId = window.requestAnimationFrame(loop);
+      stopped = false;
+    }
+    
+    function stop() {
+      if (requestId) {
+        window.cancelAnimationFrame(requestId);
+      }
+      stopped = true;
+    }
+    
+    start();
+    
+    canvas.addEventListener('mousemove', function(e){
+      var mousePos = calculateMousePos(e);
+      paddle1Y = mousePos.y - (PADDLE_HEIGHT/2);
+    });
+    
+    canvas.addEventListener('click', function(){
+      if(!winningScreenShowed){
+        return;
+      }
+      winningScreenShowed = false;
+      playerScore = 0;
+      computerScore = 0;
+    });
+
+    function getRadomNumber(min, max){
+      return Math.random() * (max - min) + min;
+    }
+    
+    function computerMovement(){
+      var speed = Math.abs(ballSpeedY);
+      if(speed>computerLevel){
+        console.log(speed);
+      } 
+      var indent = (speed > computerLevel) ? -10 :40;
+      paddle2Y = ballY-indent;
+    }
+    
+    function moveEverything(){   
+        if(winningScreenShowed){
+          return;
+        }
+        var hitThePaddle1 = (ballY > paddle1Y && ballY < paddle1Y + PADDLE_HEIGHT);
+        var hitThePaddle2 = (ballY > paddle2Y && ballY < paddle2Y + PADDLE_HEIGHT);
+        computerMovement();
+        ballX = ballX + ballSpeedX;
+        ballY = ballY + ballSpeedY;
+        if(ballX > W-40){
+          if(hitThePaddle2){
+            ballSpeedX = -ballSpeedX;
+          }else if(ballX > W){
+            playerScore++;
+            resetBall();
+          }
+        }
+        if(ballX < 40){
+          if(hitThePaddle1){
+            ballSpeedX = -ballSpeedX;
+            var deltaY = ballY - (paddle1Y + (PADDLE_HEIGHT/2));
+            ballSpeedY = deltaY * 0.2;
+          }else if(ballX < 0){
+            computerScore++;
+            resetBall();
+            stop();
+            setTimeout(function(){
+              start();
+            }, 1000);
+          }
+        }
+        if(ballY > H-20){
+          ballSpeedY = -ballSpeedY;
+        }
+        if(ballY < 20){
+          ballSpeedY = -ballSpeedY;
+        }
+    }
+
+    function drawNet(){
+      for(var i = 0; i < H; i+=40){
+        drawRect(W/2-1, i, 2, 20, 'white');
+      }
+    }
+  
+    function drawEverything(){
+      drawRect(0, 0, W, H, 'black');
+      drawRect(10, 10, W-20, H-20, '#005d41');
+      drawRect(W/2-1, 10, 3, H-20, 'white');  
+            
+      drawRect(20, paddle1Y, PADDLE_THICKNESS, PADDLE_HEIGHT, '#8f0437');
+      drawRect(W-PADDLE_THICKNESS-20, paddle2Y, PADDLE_THICKNESS, PADDLE_HEIGHT, '#115cd7');
+      drawCircle(ballX, ballY, 5, 'yellow');
+      if(winningScreenShowed){
+        ctx.fillStyle = 'white';
+        if(playerScore == WINNING_SCORE){
+          ctx.fillText('You Won!', 100, 100);
+        }else if(computerScore >= WINNING_SCORE){
+          ctx.fillText('Computer Won!', W-150, 100);  
+        }
+        ctx.fillText('click to continue', 300, 310);
+        return;
+      }
+      ctx.fillStyle = 'white';
+      ctx.fillText(playerScore, 100, 100);
+      ctx.fillText(computerScore, W-100, 100);
+    }
+
+    function drawRect(x, y, w, h, color){
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, w, h);
+    }
+
+    function drawCircle(x, y, rad, color){
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(x, y, rad, 0, Math.PI * 2, false);
+      ctx.fill();
+    }
+
+    function calculateMousePos(e){
+      var rect = canvas.getBoundingClientRect();
+      var root = document.documentElement;
+      var mouseX = e.clientX - rect.left - root.scrollLeft;
+      var mouseY = e.clientY - rect.top - root.scrollTop;
+      return {
+        x: mouseX,
+        y: mouseY
+      }
+    }
+  
+    function resetBall(){
+      if(playerScore == WINNING_SCORE || computerScore == WINNING_SCORE){
+        winningScreenShowed = true;
+      }
+      ballX = W/2;
+      ballY = H/2;
+      ballSpeedY = 0;
+      paddle2Y = 150;
+      paddle1Y = 150;
+    }
+  }
+</script>
+
+</body>
+</html>

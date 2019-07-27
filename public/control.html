@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="">
+  <title>Ping Pong Game  - With Basic Socket.io Integration</title>
+
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+  <style>
+    .container, .row {
+      height: 100%;
+      min-height: 100%;
+    }
+
+    html, body {
+      height: 100%;
+    }  
+  </style>
+</head> 
+  <body class=""> 
+  
+    <div id="center-img"></div>
+    <div id="mob-plate-container"></div>    
+
+    <div class="container">
+      <!-- Example row of columns -->
+      <div class="row justify-content-center align-items-center">
+        
+        <div class="col content-container">
+          
+          <div id="connect-token-container">
+                <div class="jumbotron jumbotron-fluid">
+                    <div class="container">
+                            
+                            <div class="lead"><strong>Enter Token:</strong></div>
+                            <input class="form-control form-control-lg" id="txt-token" type="text">
+                            <p class="mt-2"><button id="btn-connect" class="btn btn-lg btn-secondary">Connect</button></p>
+                            <p class="lead"><em><strong>Press connect button to pair with the desktop.</strong></em></p>
+                    </div>
+                </div>            
+          </div>
+          <div id="loading-connect" style="display:none;"><span class="glyphicon glyphicon-refresh glyphicon-refresh-animate"></span> Connecting...</div>
+        </div>
+
+        <div class="col trigger-container" style="display:none;">
+          
+          <div class="btn-container">
+            <button id="btn-start" class="btn btn-primary">START NOW</button>
+          </div>
+
+        </div>
+
+        <div class="col-sm-12 item-container" style="display:none;">
+
+        </div>
+
+
+      </div>
+
+    </div> <!-- /container -->
+
+
+
+
+
+   
+
+      <div id="display-connected-token"  class="hide"></div>
+      <div id="display-error-message"></div>
+
+      <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
+      <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
+    
+      <script src="/socket.io/socket.io.js"></script>
+      <script>
+        var urlPath = "http://89.47.161.93:3005/";    
+        var socket = io();
+        var windowHeight = window.innerHeight;
+        var windowWidth = $(window).width() - 17;
+        
+        var arr_pairing = {};
+
+        // [+] GENERIC FUNCTION
+        function getParameterByName(name) {
+            name = name.replace(/[\[]/, "\\[").replace(/[\]]/, "\\]");
+            var regex = new RegExp("[\\?&]" + name + "=([^&#]*)"),
+            results = regex.exec(location.search);
+            return results === null ? "" : decodeURIComponent(results[1].replace(/\+/g, " "));
+        }
+        // [-] GENERIC FUNCTION
+
+
+        $(document).on('click','#btn-connect',function(e)  {
+
+        if($('#txt-token').val() != '')
+        {
+            token_connected = $('#txt-token').val();
+
+            socket.emit("initPairing", {"token":token_connected});
+
+            socket.on('token_validate', function(data){
+            // alert(data);
+            if(data == 'success')
+            {
+                $('#connect-token-container').hide();
+                $('#loading-connect').show();  
+            }
+            else
+            {
+                $('#connect-token-container').show();
+                $('#loading-connect').hide();              
+            }
+
+                
+            });
+
+        }
+
+        });  
+
+
+        $(document).on('click','#btn-start',function(e)  {
+            $(this).hide();
+            $('#screen-2-container').show();
+            socket.emit("startTrigger", {
+                'desktop_socketId' : arr_pairing[token_connected].desktop_socketId,
+                'device_socketId' : arr_pairing[token_connected].device_socketId,
+                'token' : arr_pairing[token_connected].token,
+                'trigger' : 'start',
+                }
+            );
+            init();
+        }); 
+
+        var token_connected ='';
+        if(getParameterByName('token'))
+        {
+            $('#txt-token').val(getParameterByName('token'));
+
+        }
+
+
+        socket = io.connect(urlPath, { query: "devicetype=mobile"});
+
+        socket.on('deviceDesktopPaired', function(data){
+            
+            console.log(data);
+            
+            if(data.status == 'paired')
+            {
+                arr_pairing[data.token]= {
+                    'desktop_socketId' : data.desktop_socketId,
+                    'device_socketId' : data.device_socketId,
+                    'token' : data.token,
+                    'status' : data.status
+                }; 
+                $('#connect-token-container').hide();
+                $('#loading-connect').show();    
+
+
+            }
+            else
+            {
+             alert('Token not exists.');
+            }
+        });
+        socket.on('waitTrigger', function(data){
+            
+            console.log(data);
+
+            if(data.trigger == 'pending')
+            {
+            $('.content-container').hide();
+            $('.trigger-container').show();    
+            }
+            else
+            {
+            alert('Token not exists.');
+            }
+
+        });
+
+        $(function() {
+
+           
+
+                // Acceleration
+                var action_ax = 0;
+                var action_ay = 0;
+
+                //initSocketConnect('mobile');
+
+
+                socket.on('devicemotion', function(data){
+                // $('#dataContainerMotion').html('x: ' + data.x + '<br/>y: ' + data.y + '<br />z: ' + data.z + '<br />r: ' + data.r+'<br/><br/>alpha: ' + data.r.alpha + '<br/>beta: ' + data.r.beta + '<br />gamma: ' + data.r.gamma);
+                });
+
+
+                socket.on('devicePairedWithDesktop', function(data){
+                alert(data);
+                    if(data == 'true')
+                    {
+                    console.log('ffffffffffff');
+                    $('#connect-token-container').fadeOut("fast");
+                    $('#loading-connect').fadeOut("fast");
+                    $('#screen-1-container').fadeIn("slow");
+                }
+
+
+                });   
+
+
+            
+        
+
+
+        });        
+        function init() {
+
+
+
+                var ua = navigator.userAgent.toLowerCase();
+                var isAndroid = ua.indexOf("android") > -1; // Detect Android devices
+
+
+                var initialOffset = null;
+
+                //Find our div containers in the DOM
+                var dataContainerOrientation = document.getElementById('dataContainerOrientation');
+                var dataContainerMotion = document.getElementById('dataContainerMotion');
+
+                //Check for support for DeviceOrientation event
+                if(window.DeviceOrientationEvent) {
+                window.addEventListener('deviceorientation', function(event) {
+                        var alpha = event.alpha;
+                        var beta = event.beta;
+                        var gamma = event.gamma;
+                        
+                        if(token_connected != '')
+                        {
+                            if (isAndroid) {
+                                
+                                if(initialOffset === null) {
+                                initialOffset = alpha;
+                                }
+
+                                var alpha = alpha - initialOffset;
+
+                                if(alpha < 0) {
+                                alpha += 360;
+                                }
+
+                                
+                            }
+                            else
+                            {
+                            if(initialOffset === null && event.absolute !== true
+                            && +event.webkitCompassAccuracy > 0 && +event.webkitCompassAccuracy < 50) {
+                            initialOffset = event.webkitCompassHeading || 0;
+                            }
+
+                            var alpha = event.alpha - initialOffset;
+                            if(alpha < 0) {
+                            alpha += 360;
+                            }                      
+                            }
+                            socket.emit("deviceorientation", {"token":token_connected,"alpha": alpha,"beta": beta,"gamma": gamma});
+                        }
+                        }, false);
+                }
+
+                // Check for support for DeviceMotion events
+                if(window.DeviceMotionEvent) {
+                window.addEventListener('devicemotion', function(event) {
+                        var x = event.acceleration.x;
+                        var y = event.acceleration.y;
+                        var z = event.acceleration.z;
+                        var r = event.rotationRate;
+                        if(token_connected != '')
+                        {
+                            socket.emit("devicemotion", {"token":token_connected,"x": x,"y": y,"z": z,"r": r});
+                        }
+                
+                        });
+                }
+
+                }
+
+      </script>
+
+  </body>
+</html>
